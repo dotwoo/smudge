@@ -22,6 +22,8 @@ import (
 	"strconv"
 	"sync"
 	"time"
+
+	"github.com/tevino/abool"
 )
 
 // A scalar value used to calculate a variety of limits
@@ -46,6 +48,12 @@ var thisHost *Node
 var knownNodesModifiedFlag = false
 
 var pingdata = newPingData(150, 50)
+
+// The smudge udp listen conn
+var udpConn *net.UDPConn
+
+// The smudge running flag
+var runningFlag *abool.AtomicBool
 
 /******************************************************************************
  * Exported functions (for public consumption)
@@ -85,6 +93,7 @@ func Begin() {
 	updateNodeStatus(thisHost, StatusAlive, 0)
 	AddNode(thisHost)
 
+	runningFlag = abool.NewBool(true)
 	// Add initial hosts as specified by the SMUDGE_INITIAL_HOSTS property
 	for _, address := range GetInitialHosts() {
 		n, err := CreateNodeByAddress(address)
@@ -106,7 +115,11 @@ func Begin() {
 		var randomAllNodes = knownNodes.getRandomNodes(0, thisHost)
 		var pingCounter int
 
+		// Exponential backoff of dead nodes, until such time as they are removed.
 		for _, node := range randomAllNodes {
+			if !runningFlag.IsSet() {
+				break
+			}
 			// Exponential backoff of dead nodes, until such time as they are removed.
 			if node.status == StatusDead {
 				var dnc *deadNodeCounter
@@ -158,12 +171,25 @@ func Begin() {
 				break
 			}
 		}
+		if !runningFlag.IsSet() {
+			break
+		}
 
 		if pingCounter == 0 {
 			logDebug("No nodes to ping. So lonely. :(")
 			time.Sleep(time.Millisecond * time.Duration(GetHeartbeatMillis()))
 		}
 	}
+}
+
+// Stop the server. close the udp lesten and stop the heartbeat.
+func Stop() {
+	if udpConn != nil {
+		udpConn.SetDeadline(time.Now())
+	} else {
+		logError("udp Listen conn is nil")
+	}
+	runningFlag.UnSet()
 }
 
 // PingNode can be used to explicitly ping a node. Calls the low-level
@@ -232,22 +258,27 @@ func getTargetNodes(count int, exclude ...*Node) []*Node {
 }
 
 func listenUDP(port int) error {
+	var err error
 	listenAddress, err := net.ResolveUDPAddr("udp", ":"+strconv.FormatInt(int64(port), 10))
 	if err != nil {
 		return err
 	}
 
 	/* Now listen at selected port */
-	c, err := net.ListenUDP("udp", listenAddress)
+	udpConn, err = net.ListenUDP("udp", listenAddress)
 	if err != nil {
 		return err
 	}
-	defer c.Close()
+	defer udpConn.Close()
 
 	for {
 		buf := make([]byte, 512)
-		n, addr, err := c.ReadFromUDP(buf)
+		n, addr, err := udpConn.ReadFromUDP(buf)
 		if err != nil {
+			if nerr, ok := err.(net.Error); ok && nerr.Timeout() {
+				logError("UDP Listen closes")
+				return err
+			}
 			logError("UDP read error: ", err)
 		}
 

@@ -19,13 +19,17 @@ package main
 import (
 	"flag"
 	"fmt"
-	"github.com/clockworksoul/smudge"
+	"log"
+	"time"
+
+	"github.com/dotwoo/smudge"
 )
 
 func main() {
 	var nodeAddress string
 	var heartbeatMillis int
 	var listenPort int
+	var stopMinutes int
 	var err error
 
 	flag.StringVar(&nodeAddress, "node", "", "Initial node")
@@ -37,6 +41,10 @@ func main() {
 	flag.IntVar(&heartbeatMillis, "hbf",
 		int(smudge.GetHeartbeatMillis()),
 		"The heartbeat frequency in milliseconds")
+
+	flag.IntVar(&stopMinutes, "stop",
+		0,
+		"sleep some minutes then go to stop Smudge,default 0, not stop")
 
 	flag.Parse()
 
@@ -53,6 +61,13 @@ func main() {
 	}
 
 	if err == nil {
+		if stopMinutes > 0 {
+			go func() {
+				time.Sleep(time.Duration(stopMinutes*10) * time.Second)
+				log.Println("smudge stop")
+				smudge.Stop()
+			}()
+		}
 		smudge.Begin()
 	} else {
 		fmt.Println(err)
