@@ -63,10 +63,16 @@ var runningFlag *abool.AtomicBool
 // Note that this is a blocking function, so act appropriately.
 func Begin() {
 	// Add this host.
-	ip, err := GetLocalIP()
-	if err != nil {
-		logFatal("Could not get local ip:", err)
-		return
+	var ip net.IP
+	var err error
+	if GetListenIP() == nil {
+		ip, err = GetLocalIP()
+		if err != nil {
+			logFatal("Could not get local ip:", err)
+			return
+		}
+	} else {
+		ip = GetListenIP()
 	}
 
 	if ip == nil {
@@ -86,7 +92,7 @@ func Begin() {
 
 	logInfo("My host address:", thisHostAddress)
 
-	go listenUDP(GetListenPort())
+	go listenUDP(GetListenIP(), GetListenPort())
 
 	// Add this node's status. Don't update any other node's statuses: they'll
 	// report those back to us.
@@ -257,9 +263,15 @@ func getTargetNodes(count int, exclude ...*Node) []*Node {
 	return filteredNodes
 }
 
-func listenUDP(port int) error {
+func listenUDP(ip net.IP, port int) error {
 	var err error
-	listenAddress, err := net.ResolveUDPAddr("udp", ":"+strconv.FormatInt(int64(port), 10))
+	var addr string
+	if ip == nil {
+		addr = ":" + strconv.FormatInt(int64(port), 10)
+	} else {
+		addr = ip.String() + ":" + strconv.FormatInt(int64(port), 10)
+	}
+	listenAddress, err := net.ResolveUDPAddr("udp", addr)
 	if err != nil {
 		return err
 	}

@@ -50,6 +50,8 @@ func main() {
 
 	smudge.SetLogThreshold(smudge.LogInfo)
 	smudge.SetListenPort(listenPort)
+	myip, _ := smudge.GetLocalIP()
+	smudge.SetListenIP(myip)
 	smudge.SetHeartbeatMillis(heartbeatMillis)
 
 	if nodeAddress != "" {
