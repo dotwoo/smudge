@@ -17,6 +17,7 @@ limitations under the License.
 package smudge
 
 import (
+	"net"
 	"os"
 	"regexp"
 	"strconv"
@@ -67,6 +68,8 @@ var heartbeatMillis int
 
 var listenPort int
 
+var listenIP net.IP
+
 var initialHosts []string
 
 var maxBroadcastBytes int
@@ -100,6 +103,11 @@ func GetListenPort() int {
 	return listenPort
 }
 
+// GetListenIP returns the ip that this host will listen on.
+func GetListenIP() net.IP {
+	return listenIP
+}
+
 // GetMaxBroadcastBytes returns the maximum byte length for broadcast payloads.
 func GetMaxBroadcastBytes() int {
 	if maxBroadcastBytes == 0 {
@@ -129,6 +137,14 @@ func SetListenPort(val int) {
 		listenPort = DefaultListenPort
 	} else {
 		listenPort = val
+	}
+}
+
+// SetListenPort sets the UDP IP to listen on. It has no effect once
+// Begin() has been called.
+func SetListenIP(ip net.IP) {
+	if ip != nil {
+		listenIP = ip
 	}
 }
 
