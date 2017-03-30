@@ -114,17 +114,46 @@ func CreateNodeByIP(ip net.IP, port uint16) (*Node, error) {
 func GetLocalIP() (net.IP, error) {
 	var ip net.IP
 
-	addrs, err := net.InterfaceAddrs()
+	ifaces, err := net.Interfaces()
 	if err != nil {
 		return ip, err
 	}
 
-	for _, a := range addrs {
-		if ipnet, ok := a.(*net.IPNet); ok && !ipnet.IP.IsLoopback() {
-			if ipnet.IP.To4() != nil {
-				ip = ipnet.IP.To4()
-				break
+	for _, iface := range ifaces {
+		if iface.Flags&net.FlagUp == 0 {
+			continue // interface down
+		}
+
+		if iface.Flags&net.FlagLoopback != 0 {
+			continue // loopback interface
+		}
+
+		// ignore docker and warden bridge
+		if strings.HasPrefix(iface.Name, "docker") || strings.HasPrefix(iface.Name, "w-") {
+			continue
+		}
+
+		addrs, err := iface.Addrs()
+		if err != nil {
+			return ip, err
+		}
+
+		for _, addr := range addrs {
+			switch v := addr.(type) {
+			case *net.IPNet:
+				ip = v.IP
+			case *net.IPAddr:
+				ip = v.IP
 			}
+			ip = ip.To4()
+			if ip == nil {
+				continue // not an ipv4 address
+			}
+
+			if ip == nil || ip.IsLoopback() {
+				continue
+			}
+			return ip, err
 		}
 	}
 
